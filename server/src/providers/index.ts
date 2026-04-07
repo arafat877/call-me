@@ -11,11 +11,13 @@ import { TwilioPhoneProvider } from './phone-twilio.js';
 import { OpenAITTSProvider } from './tts-openai.js';
 import { KokoroTTSProvider } from './tts-kokoro.js';
 import { OpenAIRealtimeSTTProvider } from './stt-openai-realtime.js';
+import { WhisperSTTProvider } from './stt-whisper.js';
 
 export * from './types.js';
 
 export type PhoneProviderType = 'telnyx' | 'twilio';
 export type TTSProviderType = 'openai' | 'kokoro';
+export type STTProviderType = 'openai' | 'whisper';
 
 export interface ProviderConfig {
   // Phone provider selection
@@ -23,6 +25,9 @@ export interface ProviderConfig {
 
   // TTS provider selection
   ttsProvider: TTSProviderType;
+
+  // STT provider selection
+  sttProvider: STTProviderType;
 
   // Phone credentials (interpretation depends on provider)
   // Telnyx: accountSid = Connection ID, authToken = API Key
@@ -43,6 +48,10 @@ export interface ProviderConfig {
 
   // Kokoro TTS (when ttsProvider is 'kokoro')
   kokoroUrl?: string;
+
+  // Whisper STT (when sttProvider is 'whisper')
+  whisperUrl?: string;
+  whisperModel?: string;
 }
 
 export function loadProviderConfig(): ProviderConfig {
@@ -53,10 +62,12 @@ export function loadProviderConfig(): ProviderConfig {
   // Default to telnyx if not specified
   const phoneProvider = (process.env.CALLME_PHONE_PROVIDER || 'telnyx') as PhoneProviderType;
   const ttsProvider = (process.env.CALLME_TTS_PROVIDER || 'openai') as TTSProviderType;
+  const sttProvider = (process.env.CALLME_STT_PROVIDER || 'openai') as STTProviderType;
 
   return {
     phoneProvider,
     ttsProvider,
+    sttProvider,
     phoneAccountSid: process.env.CALLME_PHONE_ACCOUNT_SID || '',
     phoneAuthToken: process.env.CALLME_PHONE_AUTH_TOKEN || '',
     phoneNumber: process.env.CALLME_PHONE_NUMBER || '',
@@ -66,6 +77,8 @@ export function loadProviderConfig(): ProviderConfig {
     sttModel: process.env.CALLME_STT_MODEL || 'gpt-4o-transcribe',
     sttSilenceDurationMs,
     kokoroUrl: process.env.CALLME_KOKORO_URL,
+    whisperUrl: process.env.CALLME_WHISPER_URL,
+    whisperModel: process.env.CALLME_WHISPER_MODEL || 'large-v3-turbo',
   };
 }
 
@@ -106,6 +119,16 @@ export function createTTSProvider(config: ProviderConfig): TTSProvider {
 }
 
 export function createSTTProvider(config: ProviderConfig): RealtimeSTTProvider {
+  if (config.sttProvider === 'whisper') {
+    const provider = new WhisperSTTProvider();
+    provider.initialize({
+      apiUrl: config.whisperUrl,
+      model: config.whisperModel,
+      silenceDurationMs: config.sttSilenceDurationMs,
+    });
+    return provider;
+  }
+
   const provider = new OpenAIRealtimeSTTProvider();
   provider.initialize({
     apiKey: config.openaiApiKey,
@@ -143,8 +166,10 @@ export function validateProviderConfig(config: ProviderConfig): string[] {
   if (!config.phoneNumber) {
     errors.push('Missing CALLME_PHONE_NUMBER');
   }
-  if (!config.openaiApiKey) {
-    errors.push('Missing CALLME_OPENAI_API_KEY (required for speech-to-text, even when using Kokoro TTS)');
+  // OpenAI key required when using OpenAI STT or OpenAI TTS
+  const needsOpenAI = config.sttProvider !== 'whisper' || config.ttsProvider === 'openai';
+  if (needsOpenAI && !config.openaiApiKey) {
+    errors.push('Missing CALLME_OPENAI_API_KEY (required for OpenAI STT/TTS)');
   }
 
   return errors;

@@ -13,6 +13,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { CallManager, loadServerConfig } from './phone-call.js';
 import { startNgrok, stopNgrok } from './ngrok.js';
 import { ensureKokoroRunning } from './providers/tts-kokoro.js';
+import { ensureWhisperServerRunning } from './providers/stt-whisper.js';
 import { loadProviderConfig } from './providers/index.js';
 
 async function main() {
@@ -27,6 +28,17 @@ async function main() {
       process.env.CALLME_KOKORO_URL = `${kokoroBaseUrl}/v1`;
     } catch (error) {
       console.error('Kokoro setup failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    }
+  }
+
+  // Auto-setup Whisper Docker container if needed
+  if (providerConfig.sttProvider === 'whisper' && !providerConfig.whisperUrl) {
+    try {
+      const whisperBaseUrl = await ensureWhisperServerRunning(providerConfig.whisperModel);
+      process.env.CALLME_WHISPER_URL = whisperBaseUrl;
+    } catch (error) {
+      console.error('Whisper setup failed:', error instanceof Error ? error.message : error);
       process.exit(1);
     }
   }

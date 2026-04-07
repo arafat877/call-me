@@ -91,7 +91,7 @@ Add these to `~/.claude/settings.json` (recommended) or export them in your shel
 | `CALLME_PHONE_AUTH_TOKEN` | Telnyx API Key or Twilio Auth Token |
 | `CALLME_PHONE_NUMBER` | Phone number Claude calls from (E.164 format) |
 | `CALLME_USER_PHONE_NUMBER` | Your phone number to receive calls |
-| `CALLME_OPENAI_API_KEY` | OpenAI API key (required for STT; also for TTS unless using Kokoro) |
+| `CALLME_OPENAI_API_KEY` | OpenAI API key (required for OpenAI STT/TTS; not needed with Whisper STT + Kokoro TTS) |
 | `CALLME_NGROK_AUTHTOKEN` | ngrok auth token for webhook tunneling |
 
 #### Optional Variables
@@ -101,6 +101,9 @@ Add these to `~/.claude/settings.json` (recommended) or export them in your shel
 | `CALLME_TTS_PROVIDER` | `openai` | TTS engine: `openai` or `kokoro` (free, local — see [Kokoro TTS](#kokoro-tts-free-local)) |
 | `CALLME_TTS_VOICE` | `onyx` / `af_bella` | Voice name (default depends on TTS provider) |
 | `CALLME_KOKORO_URL` | - | URL of existing Kokoro instance (e.g. `http://localhost:8880/v1`). If unset, auto-starts Docker container |
+| `CALLME_STT_PROVIDER` | `openai` | STT engine: `openai` or `whisper` (free, local — see [Whisper STT](#whisper-stt-free-local)) |
+| `CALLME_WHISPER_MODEL` | `large-v3-turbo` | Whisper model name (e.g. `large-v3-turbo`, `medium`, `large-v3`) |
+| `CALLME_WHISPER_URL` | - | URL of existing whisper.cpp server. If unset, auto-starts locally |
 | `CALLME_PORT` | `0` (auto) | Local HTTP server port (0 = OS picks a free port) |
 | `CALLME_NGROK_DOMAIN` | - | Custom ngrok domain (paid feature) |
 | `CALLME_TRANSCRIPT_TIMEOUT_MS` | `180000` | Timeout for user speech (3 minutes) |
@@ -200,10 +203,10 @@ await end_call({
 | Phone number | ~$1/month | ~$1.15/month |
 
 Plus API costs (same for both phone providers):
-- **Speech-to-text**: ~$0.006/min (OpenAI gpt-4o-transcribe)
+- **Speech-to-text**: ~$0.006/min (OpenAI gpt-4o-transcribe) or **free** with Whisper
 - **Text-to-speech**: ~$0.02/min (OpenAI TTS) or **free** with Kokoro
 
-**Total**: ~$0.03-0.04/minute with OpenAI TTS, ~$0.01-0.02/minute with Kokoro
+**Total**: ~$0.03-0.04/minute with all OpenAI, ~$0.01-0.02/minute with Kokoro, or **phone costs only** with Whisper + Kokoro
 
 ---
 
@@ -227,6 +230,52 @@ CALLME_KOKORO_URL=http://localhost:8880/v1
 **Voices:** Kokoro has different voices than OpenAI. Query available voices at `http://localhost:8880/v1/audio/voices`. Popular choices: `af_bella`, `af_sky`, `am_adam`. Set with `CALLME_TTS_VOICE`.
 
 **Requirements:** Docker (for auto-setup) or an existing Kokoro instance.
+
+---
+
+## Whisper STT (Free, Local)
+
+[Whisper.cpp](https://github.com/ggml-org/whisper.cpp) is a free, local speech-to-text engine. No STT API key needed:
+
+```bash
+CALLME_STT_PROVIDER=whisper
+```
+
+**Auto-setup:** The plugin automatically downloads the model (~1.5GB for large-v3-turbo) from Hugging Face and starts the whisper.cpp server on first use.
+
+- **macOS:** Uses native `whisper-server` binary with Metal GPU acceleration. Install via `brew install whisper-cpp`.
+- **Linux:** Falls back to Docker (`ghcr.io/ggml-org/whisper.cpp`, amd64 only).
+
+**Existing instance:** If you already have a whisper.cpp server running:
+
+```bash
+CALLME_STT_PROVIDER=whisper
+CALLME_WHISPER_URL=http://localhost:8080
+```
+
+**Models:** Default is `large-v3-turbo` (good balance of speed and accuracy). Options:
+- `large-v3-turbo` — Default, fast, good accuracy
+- `medium` — Faster, slightly lower accuracy
+- `large-v3` — Best accuracy, slower and more RAM (~3GB)
+
+Change with `CALLME_WHISPER_MODEL=medium`.
+
+**Note:** Phone audio is 8kHz (telephony quality), which limits transcription accuracy compared to higher-quality audio sources. Names, numbers, and noisy environments are most affected.
+
+**Requirements:** `brew install whisper-cpp` (macOS) or Docker (Linux), or an existing whisper.cpp server instance.
+
+---
+
+## Fully Local Setup (Zero API Costs)
+
+Combine Whisper STT with Kokoro TTS for a completely local setup — no OpenAI API key needed:
+
+```bash
+CALLME_STT_PROVIDER=whisper
+CALLME_TTS_PROVIDER=kokoro
+```
+
+You still need a phone provider (Telnyx/Twilio) and ngrok, but all speech processing runs locally.
 
 ---
 
